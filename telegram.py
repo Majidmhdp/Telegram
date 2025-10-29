@@ -6,8 +6,8 @@ from models import Channel
 from models import Chat
 
 # === Replace with your credentials ===
-api_id = 17442549  # your API ID
-api_hash = 'f52d5d4849ba9ea55c53c8276c700668'
+api_id = 123456  # your API ID
+api_hash = ''
 phone = '+1234567890'  # your phone number
 password = 'password'  # optional if 2FA is enabled
 # =====================================
