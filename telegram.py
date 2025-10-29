@@ -1,15 +1,19 @@
 from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError
 import asyncio
+from models import User
+from models import Channel
+from models import Chat
 
 # === Replace with your credentials ===
-api_id = 1234567  # your API ID
-api_hash = 'your_api_hash_here'
+api_id = 17442549  # your API ID
+api_hash = 'f52d5d4849ba9ea55c53c8276c700668'
 phone = '+1234567890'  # your phone number
-password = 'your_2fa_password_here'  # optional if 2FA is enabled
+password = 'password'  # optional if 2FA is enabled
 # =====================================
 
 client = TelegramClient('telegram_session', api_id, api_hash)
+channels, groups, contacts = [], [], []
 
 
 async def login():
@@ -28,43 +32,42 @@ async def login():
 
     print("✅ Logged in successfully!\n")
 
+def auto_assign(obj, target_class):
+    target = target_class()
+    for key, value in vars(obj).items():
+        if hasattr(target, key):
+            setattr(target, key, value)
+    return target
+
+async def find_user_by_id(user_id):
+    return next((u for u in contacts if u.id == int(user_id)), None)
 
 async def list_entities():
     """Lists all channels, groups, and contacts"""
     dialogs = await client.get_dialogs()
 
-    channels, groups, contacts = [], [], []
-
     for dialog in dialogs:
         entity = dialog.entity
-        if getattr(entity, 'megagroup', False):
-            groups.append((entity.id, entity.title))
-        elif getattr(entity, 'broadcast', False):
-            channels.append((entity.id, entity.title))
-        elif getattr(entity, 'first_name', None):
-            contacts.append((entity.id, f"{entity.first_name} {entity.last_name or ''}".strip()))
 
-    print("📡 Channels:")
-    for i, (cid, title) in enumerate(channels, 1):
-        print(f"{i}. {title} (ID: {cid})")
+        if (type(entity).__name__ == 'User'):
+            result = auto_assign(entity, User)
+            contacts.append(result)
+        elif (type(entity).__name__ == 'Channel'):
+            result = auto_assign(entity, Channel)
+            channels.append(result)
+        elif (type(entity).__name__ == 'Chat'):
+            result = auto_assign(entity, Chat)
+            groups.append(result)
+    print(contacts)
 
-    print("\n👥 Groups:")
-    for i, (gid, title) in enumerate(groups, 1):
-        print(f"{i + len(channels)}. {title} (ID: {gid})")
-
-    print("\n📞 Contacts:")
-    for i, (uid, name) in enumerate(contacts, 1):
-        print(f"{i + len(channels) + len(groups)}. {name} (ID: {uid})")
-
-    return channels, groups, contacts
-
-
-async def fetch_messages(entity_name):
-    """Fetches all messages from the selected entity"""
-    print(f"📥 Fetching messages from {entity_name}...")
+async def fetch_messages(entity):
+    if not entity:
+        raise ValueError("Entity not found")
+    
+    print(f"📥 Fetching messages from {entity.id}...")
     messages = []
 
-    async for message in client.iter_messages(entity_name):
+    async for message in client.iter_messages(entity.id):
         messages.append({
             "id": message.id,
             "date": message.date,
@@ -74,8 +77,7 @@ async def fetch_messages(entity_name):
     print(f"✅ Total messages fetched: {len(messages)}")
 
     # Save messages to file
-    safe_name = entity_name.replace('/', '_').replace(' ', '_')
-    filename = f"{safe_name}_messages.txt"
+    filename = f"{entity.id}_messages.txt"
 
     with open(filename, 'w', encoding='utf-8') as f:
         for m in reversed(messages):
@@ -84,28 +86,47 @@ async def fetch_messages(entity_name):
 
     print(f"💾 Messages saved to '{filename}'")
 
-
 async def main():
     await login()
-    channels, groups, contacts = await list_entities()
+    await list_entities()
 
-    all_entities = channels + groups + contacts
-    if not all_entities:
-        print("⚠️ No channels, groups, or contacts found.")
-        return
+    while True:
+        print("\n📋 Menu:")
+        print("1️⃣  Fetch messages from a chat")
+        print("2️⃣  Send message to a contact")
+        print("3️⃣  Exit")
 
-    # Ask user to pick an entity
-    choice = input("\nEnter the number of the chat to fetch messages from: ")
+        choice = input("Choose an option: ")
+        if choice == '1':
+            # Ask user to pick an entity
+            choice = input("\nEnter the number of the chat to fetch messages from: ")
 
-    try:
-        choice = int(choice) - 1
-        entity_id, entity_name = all_entities[choice]
-    except (ValueError, IndexError):
-        print("❌ Invalid selection.")
-        return
+            try:
+                entity = await find_user_by_id(choice)
+                await fetch_messages(entity)
+            except (ValueError, IndexError):
+                print("❌ Invalid selection.")
+                return
 
-    await fetch_messages(entity_name)
+        elif choice == '2':
+            choice = input("\nEnter the number of the contact id to message: ")
+            try:
+                entity = await find_user_by_id(choice)
+                message = input("💬 Enter your message: ")
+                await client.send_message(entity.id, message)
+                print(f"✅ Message sent to {entity.id}!")
 
+            except (ValueError, IndexError):
+                print("❌ Invalid choice.")
+                return
+
+        elif choice == '3':
+            print("👋 Exiting...")
+            break
+        else:
+            print("❌ Invalid option.")
+
+    
 
 with client:
     client.loop.run_until_complete(main())
